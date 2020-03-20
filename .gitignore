@@ -39,3 +39,4 @@ vignettes/*.pdf
 data/wet/*
 data/occurences/*
 rcanvec.cache/*
+data/aquatic_species.csv
