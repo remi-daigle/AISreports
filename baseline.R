@@ -64,22 +64,21 @@ Canada <- ne_states(country = c("Canada"),
 # # fill in missing grid cells from very big lakes
 # missinggrid <- ((st_make_grid(st_union(st_as_sfc(st_bbox(EEZ)),
 #                               st_as_sfc(st_bbox(Canada))),n = 150) %>%
-#   st_as_sf())[c(91,92,242,243,393,394,546,697,840,990,1147,1290,1298:1300,1440,1451,1589:1591,1602,1739,1740,1743,1888,1889,1892,2042,2334,2633,2780:2783,2926,2929:2931,3077:3080,3228:3230,5460,5461,5760,10392,10542,10543,13091,13390),])%>%
+#   st_as_sf())[c(92,93,243,244,394,395,547,698,841,991,1148,1291,1299:1301,1441,1452,1590:1592,1603,1740,1741,1744,1889,1890,1893,2043,2335,2634,2781:2784,2927,2930:2932,3078:3081,3229:3231,5461,5462,5761,10393,10543,10544,13092,13391,13392),])%>%
 #   mutate(canada=1,
-#          eez=1)%>% 
-#   mutate(geometry=x) %>% 
-#   st_set_geometry("geometry") %>% 
+#          eez=1)%>%
+#   mutate(geometry=x) %>%
+#   st_set_geometry("geometry") %>%
 #   select(-x)
 # 
-# erie <- missinggrid[c(1,2),] %>% 
-#   mutate(geometry=geometry - c(0,698046.2-664912.8)) %>% 
-#   st_set_crs(st_crs(missinggrid)) 
+# erie <- rbind(missinggrid[1,],grid[2,]) %>%
+#   mutate(geometry=geometry - c(0,698046.2-664912.8)) %>%
+#   st_set_crs(st_crs(missinggrid))
 # 
 # newgrid <- rbind(grid,missinggrid,erie)
 # 
 # st_write(newgrid,"data/grid.shp")
-# 
-# 
+
 # But again to save time, instead of running the above, let's just load the file it generates
 
 grid <- st_read("data/grid.shp")
