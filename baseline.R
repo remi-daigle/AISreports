@@ -54,12 +54,31 @@ Canada <- ne_states(country = c("Canada"),
 # Since sampling for Canada as a whole in one shot would actually break either your computer or the internet, we will divide up the process into a spatial grid and do it cell by cell.
 # 
 # grid <- st_make_grid(st_union(st_as_sfc(st_bbox(EEZ)),
-# st_as_sfc(st_bbox(Canada))),n = 150) %>% 
-# st_as_sf() %>% 
-# mutate(canada=lengths(st_intersects(.,Canada))>0,
-# eez=lengths(st_intersects(.,EEZ))>0) %>% 
-# filter(eez|canada)
+#                               st_as_sfc(st_bbox(Canada))),n = 150) %>%
+#   st_as_sf() %>%
+#   mutate(canada=lengths(st_intersects(.,Canada))>0,
+#          eez=lengths(st_intersects(.,EEZ))>0) %>%
+#   filter(eez|canada)
 # st_write(grid,"data/grid.shp")
+# 
+# # fill in missing grid cells from very big lakes
+# missinggrid <- ((st_make_grid(st_union(st_as_sfc(st_bbox(EEZ)),
+#                               st_as_sfc(st_bbox(Canada))),n = 150) %>%
+#   st_as_sf())[c(91,92,242,243,393,394,546,697,840,990,1147,1290,1298:1300,1440,1451,1589:1591,1602,1739,1740,1743,1888,1889,1892,2042,2334,2633,2780:2783,2926,2929:2931,3077:3080,3228:3230,5460,5461,5760,10392,10542,10543,13091,13390),])%>%
+#   mutate(canada=1,
+#          eez=1)%>% 
+#   mutate(geometry=x) %>% 
+#   st_set_geometry("geometry") %>% 
+#   select(-x)
+# 
+# erie <- missinggrid[c(1,2),] %>% 
+#   mutate(geometry=geometry - c(0,698046.2-664912.8)) %>% 
+#   st_set_crs(st_crs(missinggrid)) 
+# 
+# newgrid <- rbind(grid,missinggrid,erie)
+# 
+# st_write(newgrid,"data/grid.shp")
+# 
 # 
 # But again to save time, instead of running the above, let's just load the file it generates
 
