@@ -1,0 +1,104 @@
+---
+title: "Checking new occurences"
+author: "Remi Daigle"
+date: "March 12, 2020"
+output:
+  html_document:
+    toc: yes
+    toc_float: yes
+---
+
+```{r}
+# library(spocc)
+# library(robis)
+# library(rgbif)
+library(sf)
+library(rnaturalearth)
+# library(mregions)
+# library(rcanvec)
+library(data.table)
+library(tidyverse)
+```
+
+
+```{r}
+datadir <- file.path("data","occurences")
+
+
+files <- file.info(file.path(datadir,list.files(path = datadir, pattern="occ"))) %>% 
+  mutate(filename=basename(row.names(.)),
+         temp=gsub("occ_","",gsub(".rds","",filename))) %>%
+  separate(temp,c("grid","year","month","day"),"_") %>% 
+  filter(size>434) %>% 
+  select(filename,grid,year,month,day)
+
+
+latlong <- readRDS(file.path(datadir,files$filename[1])) %>% st_crs()
+
+st <- Sys.time()
+occ <- lapply(files$filename, function(x) readRDS(file.path(datadir,x)) %>% 
+               mutate(filename=x) %>% 
+  as.data.table()) %>% 
+  rbindlist() %>%
+  mutate(geometry=st_sfc(geometry,crs=latlong)) %>% 
+  left_join(files,by="filename") %>% 
+  st_as_sf()
+Sys.time()-st
+```
+
+
+
+
+load baseline
+
+```{r}
+files <- file.info(file.path(datadir,list.files(path = datadir, pattern="baseline"))) %>% 
+  mutate(filename=basename(row.names(.)),
+         temp=gsub("occ_","",gsub(".rds","",filename)))%>% 
+  separate(temp,c("grid","year","month","day"),"_") %>% 
+  filter(size>434) %>% 
+  select(filename,year,month,day)
+
+baseline <- lapply(files$filename, function(x) readRDS(file.path(datadir,x)) %>% 
+               mutate(filename=x) %>% 
+  as.data.table()) %>% 
+  rbindlist() %>%
+  mutate(geometry=st_sfc(geometry,crs=latlong)) %>% 
+  group_by(scientificName,grid) %>% 
+  summarize(n=n())
+
+#statscan
+proj <- "+proj=lcc +lat_1=49 +lat_2=77 +lat_0=63.390675 +lon_0=-91.86666666666666 +x_0=6200000 +y_0=3000000 +ellps=GRS80 +datum=NAD83 +units=m +no_defs "
+
+grid <- st_read("data/grid.shp") %>% 
+  mutate(grid=sprintf("%05d",as.numeric(rownames(.)))) %>% 
+  st_transform(proj)
+  
+
+Canada <- ne_states(country = c("Canada"),
+                    returnclass = "sf") %>% 
+  st_combine() %>% 
+  st_transform(latlong) %>% 
+  st_transform(proj)
+```
+
+plot for existing species
+
+```{r, eval=FALSE}
+plotdata <- grid %>% 
+  left_join(filter(baseline,scientificName=="Carcinus maenas"),by="grid")
+
+ggplot(Canada) + 
+  geom_sf() +
+  geom_sf(data=plotdata,aes(fill=n),colour="transparent")+
+  scale_fill_distiller(palette = "Oranges",na.value="transparent",direction = 1)+
+  theme_dark()
+```
+
+
+
+Save new baseline file
+
+```{r, eval=FALSE}
+saveRDS(occ,file.path(datadir,paste0("baseline_",format(Sys.time(), "%Y_%m_%d"),".rds")))
+```

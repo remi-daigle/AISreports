@@ -148,46 +148,30 @@ grid <- st_read("data/grid.shp")
 
 
 # # temporarily restrict to NS
-# NS <- ne_states(country = c("Canada"),
-#                 returnclass = "sf") %>% 
-#   filter(name_en=="Nova Scotia") %>% 
-#   st_transform(proj) %>% 
-#   st_buffer(1000000)
-# 
-# ns <- (lengths(st_intersects(grid,NS))>0) %>% 
-#   which()
-# 
-# 
-# 
-# wetfiles <- list.files(path="data/wet",pattern=".shp") %>% 
-#   gsub(".shp","",.) %>% 
-#   gsub("wet_","",.) %>% 
-#   as.numeric()
-# 
-# grid <- grid %>% 
-#   mutate(done=row.names(.) %in% wetfiles,
-#          ns=row.names(.) %in% ns)
-# 
-# ggplot(grid)+
-#   geom_sf(data=Canada,fill='lightgreen')+
-#   geom_sf(data=EEZ,fill='lightblue')+
-#   geom_sf(aes(fill=done))
+NS <- ne_states(country = c("Canada"),
+                returnclass = "sf") %>%
+  filter(name_en=="Nova Scotia") %>%
+  st_transform(proj) %>%
+  st_buffer(1000000)
 
-# doParallel::registerDoParallel()
-# 
-# foreach(g=sample(ns)) %do% {
-#   possible <- paste0("occ_",sprintf("%05d",g),"_",format(seq(Sys.time()-30*24*3600,Sys.time(),24*3600),"%Y_%m_%d"),".rds")
-#   if(sum(match(possible,list.files("data/occurences/")),na.rm=TRUE)==0){
-#     wet <- AIScanR::iswet(grid,g,EEZ,latlong,proj)
-#     
-#     # occ <- getdata(grid, g,latlong)
-#     # isaquatic(occ,wet)
-#     # saveRDS(occ,paste0("data/occurences/occ_",sprintf("%05d",g),"_",format(Sys.time(), "%Y_%m_%d"),".rds"))
-#   }
-# }
-# 
-# doParallel::stopImplicitCluster()
+ns <- (lengths(st_intersects(grid,NS))>0) %>%
+  which()
 
+
+
+wetfiles <- list.files(path="data/wet",pattern=".shp") %>%
+  gsub(".shp","",.) %>%
+  gsub("wet_","",.) %>%
+  as.numeric()
+
+grid <- grid %>%
+  mutate(done=row.names(.) %in% wetfiles,
+         ns=row.names(.) %in% ns)
+
+ggplot(grid)+
+  geom_sf(data=Canada,fill='lightgreen')+
+  geom_sf(data=EEZ,fill='lightblue')+
+  geom_sf(aes(fill=done))
 
 no_cores <- detectCores()
 clust <- makeCluster(no_cores/2)
@@ -199,29 +183,26 @@ clusterExport(clust,"Canada")
 
 x=clusterApply(clust,as.numeric(row.names(grid)), function(g) {
   if(sum(match(paste0("occ_",sprintf("%05d",g),"_",format(seq(Sys.time()-30*24*3600,Sys.time(),24*3600),"%Y_%m_%d"),".rds"),list.files("data/occurences/")),na.rm=TRUE)==0){
-    try(wet <- AIScanR::iswet(grid,g,EEZ,latlong,proj))
-
-    # occ <- getdata(grid, g,latlong)
-    # isaquatic(occ,wet)
-    # saveRDS(occ,paste0("data/occurences/occ_",sprintf("%05d",g),"_",format(Sys.time(), "%Y_%m_%d"),".rds"))
+    try({
+      wet <- AIScanR::iswet(grid,g,EEZ,latlong,proj)
+      # occ <- getdata(grid, g,latlong)
+      # isaquatic(occ,wet)
+      # saveRDS(occ,paste0("data/occurences/occ_",sprintf("%05d",g),"_",format(Sys.time(), "%Y_%m_%d"),".rds"))
+    
+    })
+    
     return("done")
   } else{
     return("already done")
   }}
 ) %>% unlist
+parallel::stopCluster(clust)
 
-# while(TRUE){
-#   try(# for(g in 1:nrow(grid)){
-#     for(g in rev(ns)){
-#       print(paste("Querying  for grid:",g))
-#       if(sum(match(paste0("occ_",sprintf("%05d",g),"_",format(seq(Sys.time()-7*24*3600,Sys.time(),24*3600),"%Y_%m_%d"),".rds"),list.files("data/occurences/")),na.rm=TRUE)==0){
-#         wet <- iswet(grid,g,EEZ,latlong,proj)
-#         occ <- getdata(grid, g,latlong)
-#         isaquatic(occ,wet)
-#         saveRDS(occ,paste0("data/occurences/occ_",sprintf("%05d",g),"_",format(Sys.time(), "%Y_%m_%d"),".rds"))
-#         gc()
-# 
-#       }
-# 
-#     })
-# }
+files <- file.info(paste0(path = "data/wet/",list.files(path = "data/wet/",pattern = "shp"))) %>% 
+  mutate(fn=gsub("data/wet/","",row.names(.))) %>% 
+  filter(size<=100) 
+
+removeme <- lapply(files$fn,
+               function(x) list.files(path = "data/wet/",
+                                      pattern=gsub("shp","",x))) %>% 
+  unlist()

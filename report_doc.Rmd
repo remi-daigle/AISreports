@@ -1,0 +1,79 @@
+---
+title: "Invasive Species Report"
+author: "Remi Daigle"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  word_document: default
+---
+
+```{r background script, include=FALSE, eval=FALSE}
+library(spocc)
+library(robis)
+library(rgbif)
+library(sf)
+library(rnaturalearth)
+library(tidyverse)
+
+# set limits
+xmin=-59.5
+xmax=-67
+ymin=43
+ymax=47.5
+
+proj <- 4326
+
+
+Canada <- ne_states(country = c("Canada","United States of America"),
+                    returnclass = "sf") %>% 
+  st_transform(proj) %>% 
+  st_crop(xmin=xmin,xmax=xmax,ymin=ymin,ymax=ymax) %>% 
+  st_combine()
+
+format(Sys.time()-3600, '%Y-%m-%d')
+
+occ_rec <- occ(from=c("bison","inat","idigbio"),
+               date=c(format(Sys.time()-3600, '%Y-%m-%d'),format(Sys.time(), '%Y-%m-%d')),
+               geometry=st_bbox(Canada),
+               limit=100) 
+
+occ_df <- occ_rec %>% 
+  occ2df() %>%
+  filter(!is.na(longitude),!is.na(latitude),!is.na(name)) %>% 
+  st_as_sf(coords=c("longitude","latitude"),crs=proj)%>% 
+  st_crop(xmin=xmin,xmax=xmax,ymin=ymin,ymax=ymax)
+
+
+reference_sp_list <- occ_df %>% 
+  filter(date<Sys.Date()-7) %>% 
+  select(name) %>% 
+  unique()
+
+new_occ <- occ_df %>% 
+  filter(date>=Sys.Date()-7,
+         !name %in% reference_sp_list)
+
+db_key <- data.frame(db=c("bison","inat","idigbio"),
+                     dbname=c("Biodiversity Information Serving Our Nation (BISON)","iNaturalist","Integrated Digitized Biocollections (iDigBio)"))
+
+db <- db_key %>% 
+  filter(db %in% unique(occ_df$prov))
+
+```
+There were `r length(unique(new_occ$name))` new species recorded in the area on the week of `r Sys.Date()-7` to `r Sys.Date()`. The report encompasses `r nrow(occ_df)` records from `r db$dbname`. Figure 1 shows the distribution of the new species. Figure 2 shows the footprint of this weeks sampling efforts.
+
+```{r, echo=FALSE, fig.width=7.5,fig.height=7.5,fig.cap="Figure 1: Distribution of newly observed species.", eval=FALSE}
+ggplot(new_occ)+
+  geom_sf(data=Canada)+
+  geom_sf()+
+  facet_wrap(~name)+
+  coord_sf(expand = FALSE)+
+  theme_dark()
+```
+
+```{r, echo=FALSE, fig.width=7.5,fig.height=7.5,fig.cap="Figure 2: Footprint of this week's sampling effort.", eval=FALSE}
+ggplot(occ_df)+
+  geom_sf(data=Canada)+
+  geom_sf()+
+  coord_sf(expand = FALSE)+
+  theme_dark()
+```

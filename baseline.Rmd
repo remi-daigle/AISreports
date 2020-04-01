@@ -6,6 +6,7 @@ output:
     toc_float: yes
 ---
 ```{r}
+library(AIScanR)
 library(spocc)
 library(robis)
 library(rgbif)
@@ -83,7 +84,7 @@ grid <- st_read("data/grid.shp")
 
 Let's see what we've done so far and identify a 'test' grid cell (red) to demonstrate the effectiveness of the functions below.
 
-```{r}
+```{r, eval=FALSE}
 # cell <- grid[193,]
 g <- 339
 # cell <- grid[g,]
@@ -104,64 +105,8 @@ This will be a giant process in a loop, so to make it readable, tractable, and f
 
 The `iswet` will create a polygon delineating which parts of a grid cell are 'wet' (i.e. in the ocean, lake, wetland, etc), and provides a 1m buffer around all such features
 
-```{r iswet}
+```{r iswet, eval=FALSE}
 # iswet
-iswet <- function(grid,g,EEZ,latlong,proj){
-  if(file.exists(paste0("data/wet/wet_",sprintf("%05d",g),".shp"))){
-    wet <- st_read(paste0("data/wet/wet_",sprintf("%05d",g),".shp"))
-  }else{
-    cell <- grid[g,]
-    if(lengths(st_intersects(cell,Canada))>0){
-      NTSs <- nts(bbox=sp::bbox(as(st_transform(cell,latlong),"Spatial")))
-      
-      canvec.download(NTSs)
-      
-      canvecs <- c(canvec.load(NTSs,"waterbody"),
-                      canvec.load(NTSs,"river"),
-                      canvec.load(NTSs,"string_bog"),
-                      canvec.load(NTSs,"wetland"),
-                      canvec.load(NTSs,"palsa_bog"),
-                      canvec.load(NTSs,"tundra_pond")) %>% 
-        lapply(st_as_sf) %>%
-        lapply(function(x) as.data.frame(x) %>% select(geometry)) %>% 
-        bind_rows() %>% 
-        st_as_sf(crs="+proj=longlat +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +no_defs") %>% 
-        st_combine() %>%
-        st_union() %>%
-        st_transform(proj) 
-      
-      freshwater <- try(canvecs %>%
-        st_buffer(1) %>% 
-        st_crop(cell) %>% 
-        st_transform(latlong))
-      
-      d=0
-      while(class(freshwater)=="try-error"){
-        d <- d+1
-        message(paste("Warning: Canvec layers are too complex, trying to simplify with dTolerance =",d))
-        freshwater <- try(canvecs %>%
-        st_simplify(preserveTopology = TRUE, dTolerance=d) %>%
-        st_buffer(1) %>% 
-        st_crop(cell) %>% 
-        st_transform(latlong))
-      }
-      
-      wet <- EEZ %>% 
-        st_crop(cell) %>% 
-        st_transform(latlong) %>%
-        st_union(.,freshwater)
-    } else {
-      wet <- EEZ %>% 
-        st_crop(cell) %>% 
-        st_transform(latlong)
-    }
-    
-    st_write(wet,paste0("data/wet/wet_",sprintf("%05d",g),".shp"))
-  }
-  
-  return(wet)
-}
-
 wet <- iswet(grid,g,EEZ,latlong,proj)
 
 
@@ -178,124 +123,7 @@ ggplot(grid[g,])+
 The `getdata` function will query the Ocean Biogeographic Information System ([OBIS](https://obis.org/)), the Global Biodiversity Information Facility ([GBIF](https://www.gbif.org/)), and [iNaturalist](https://inaturalist.ca)
 
 
-```{r getdata}
-# getdata
-getdata <- function(grid, g,latlong){
-  # browser()
-  cell <- grid[g,]
-
-  n <- spocc::occ(from=c("inat"),
-             geometry= st_as_text(st_transform(cell,latlong)$geometry),
-             limit=1)$inat$meta$found
-  
-  subgrid <- st_make_grid(cell,n=(n%/%10000+1)*2)
-  
-  occ <- data.frame()
-  for(s in 1:length(subgrid)){
-    
-    llcell <- st_transform(subgrid[s],latlong)
-    
-    
-    # get OBIS data
-    print(paste("Querying OBIS for subgrid:",s))
-    
-    obis <- robis::occurrence(geometry = st_as_text(llcell)) 
-    
-    
-    
-    if(nrow(obis)==0){
-      obis <- data.frame(matrix(ncol=5,nrow=0, 
-                                dimnames=list(NULL,c("scientificName",
-                                                     "decimalLongitude",
-                                                     "decimalLatitude",
-                                                     "eventDate",
-                                                     "dataset_id"))))
-    }
-    if(!'eventDate' %in% names(obis)) obis$eventDate=NA
-    
-    # get GBIF data
-    print(paste("Querying GBIF for subgrid:",s))
-    
-    gbif <- data.frame()
-    anygbif <- rgbif::occ_search(geometry = st_as_text(llcell),
-                                 basisOfRecord="OBSERVATION",
-                                 return="meta")$count
-    while(nrow(gbif)<anygbif){
-      gbif <- bind_rows(gbif,
-                        rgbif::occ_search(geometry = st_as_text(llcell),
-                                          basisOfRecord="OBSERVATION",
-                                          return='data',
-                                          start=nrow(gbif),
-                                          limit=500))
-      # print(nrow(gbif))
-    }
-    
-    if(nrow(gbif)==0){
-      gbif <- data.frame(matrix(ncol=5,nrow=0, 
-                                dimnames=list(NULL,c("scientificName",
-                                                     "decimalLongitude",
-                                                     "decimalLatitude",
-                                                     "eventDate",
-                                                     "gbifID"))))
-    }
-    
-    # get inat data
-    print(paste("Querying iNaturalist for subgrid:",s))
-    
-    inat <- data.frame()
-    while(nrow(inat)%%30==0){
-      new <- spocc::occ(from=c("inat"),
-                                   geometry= st_as_text(llcell),
-                                   page=nrow(inat)/30+1)$inat$data[[1]]
-      
-      if(nrow(new)==0){
-        break
-      }else{
-        inat <- bind_rows(inat,
-                          new)
-      }
-      # print(nrow(inat))
-    }
-    
-    if(nrow(inat)==0){
-      inat <- data.frame(matrix(ncol=5,nrow=0, 
-                                dimnames=list(NULL,c("name",
-                                                     "longitude",
-                                                     "latitude",
-                                                     "observed_on_details.date",
-                                                     "id"))))
-    }
-    if(!'name' %in% names(inat)) inat$name=NA
-    if(!'observed_on_details.date' %in% names(inat)) inat$observed_on_details.date=NA
-
-    
-    # combine the datasets and make into sf objects
-    occ <- bind_rows(occ,
-                     rbind(obis %>% 
-                             st_as_sf(coords=c("decimalLongitude","decimalLatitude"),crs=latlong) %>%
-                             mutate(link=paste0('https://obis.org/dataset/',dataset_id)) %>% 
-                             select(scientificName,link,eventDate),
-                           gbif %>% 
-                             st_as_sf(coords=c("decimalLongitude","decimalLatitude"),crs=latlong) %>%
-                             mutate(link=paste0('https://www.gbif.org/occurrence/',gbifID)) %>% 
-                             select(scientificName,link,eventDate),
-                           inat %>% 
-                             filter(!is.na(longitude),
-                                    !is.na(latitude),
-                                    !is.na(name),
-                                    quality_grade=='research') %>% 
-                             st_as_sf(coords=c("longitude","latitude"),crs=latlong) %>%
-                             mutate(incell=lengths(st_intersects(.,llcell))>0,
-                                    link=paste0('https://www.inaturalist.org/observations/',id),
-                                    scientificName=name,
-                                    eventDate=observed_on_details.date) %>% 
-                             filter(incell,!is.na(scientificName)) %>% 
-                             select(scientificName,link,eventDate)))
-    print(nrow(occ))
-  }
-      return(unique(occ)%>% st_as_sf(crs=latlong))
-}
-
+```{r getdata, eval=FALSE}
 occ <- getdata(grid, g,latlong)
 
 head(occ)
@@ -304,45 +132,7 @@ head(occ)
 
 ## isaquatic
 
-```{r}
-isaquatic <- function(occ,wet){
-  if(nrow(occ)!=0){
-    if(file.exists("data/aquatic_species.csv")){
-      aquasp <- read.csv("data/aquatic_species.csv",stringsAsFactors = FALSE)
-    } else {
-      aquasp <-  occ  %>% 
-        select(scientificName) %>% 
-        unique() %>% 
-        group_by(scientificName) %>% 
-        summarize(geometry=st_combine(geometry)) %>% 
-        mutate(aquatic=lengths(st_intersects(.,wet))>0) %>% 
-        as.data.frame() %>% 
-        select(scientificName,aquatic)
-    }
-  
-    new <- occ  %>% 
-      filter(!scientificName %in% aquasp$scientificName) %>% 
-      select(scientificName) %>% 
-      unique() %>% 
-      group_by(scientificName) %>% 
-      summarize(geometry=st_combine(geometry)) %>% 
-      mutate(aquatic=lengths(st_intersects(.,wet))>0) %>% 
-      as.data.frame() %>% 
-      select(scientificName,aquatic)
-    
-    aquasp <- full_join(new,aquasp,by="scientificName") %>%
-      rowwise() %>% 
-      mutate(aquatic=any(aquatic.x,aquatic.y)) %>% 
-      select(scientificName,aquatic) %>% 
-      mutate(aquatic=replace_na(aquatic,replace=FALSE))
-    
-    write.csv(aquasp,"data/aquatic_species.csv",row.names = FALSE)
-  } else {
-    aquasp <- data.frame()
-  }
-  return(aquasp)
-}
-
+```{r, eval=FALSE}
 test <- occ %>% 
   left_join(isaquatic(occ,wet),by="scientificName")
 
@@ -375,7 +165,7 @@ ns <- (lengths(st_intersects(grid,NS))>0) %>%
 ```{r}
 while(TRUE){
   try(# for(g in 1:nrow(grid)){
-    for(g in ns){
+    for(g in rev(ns)){
       print(paste("Querying  for grid:",g))
       if(sum(match(paste0("occ_",sprintf("%05d",g),"_",format(seq(Sys.time()-7*24*3600,Sys.time(),24*3600),"%Y_%m_%d"),".rds"),list.files("data/occurences/")),na.rm=TRUE)==0){
         wet <- iswet(grid,g,EEZ,latlong,proj)
