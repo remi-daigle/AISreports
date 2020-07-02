@@ -81,7 +81,8 @@ Canada <- ne_states(country = c("Canada"),
 
 # But again to save time, instead of running the above, let's just load the file it generates
 
-grid <- st_read("data/grid.shp")
+grid <- st_read("data/grid.shp")%>% 
+  st_transform(proj)
 
 
 # Geography Map -----------------------------------------------------------
@@ -151,7 +152,7 @@ grid <- st_read("data/grid.shp")
 NS <- ne_states(country = c("Canada"),
                 returnclass = "sf") %>%
   filter(name_en=="Nova Scotia") %>%
-  st_transform(proj) %>%
+  st_transform(st_crs(grid)) %>%
   st_buffer(1000000)
 
 ns <- (lengths(st_intersects(grid,NS))>0) %>%
@@ -174,7 +175,8 @@ ggplot(grid)+
   geom_sf(aes(fill=done))
 
 no_cores <- detectCores()
-clust <- makeCluster(no_cores/2)
+# clust <- makeCluster(no_cores/2)
+clust <- makeCluster(4)
 clusterExport(clust,"grid")
 clusterExport(clust,"EEZ")
 clusterExport(clust,"latlong")
@@ -184,13 +186,13 @@ clusterExport(clust,"Canada")
 x=clusterApply(clust,as.numeric(row.names(grid)), function(g) {
   if(sum(match(paste0("occ_",sprintf("%05d",g),"_",format(seq(Sys.time()-30*24*3600,Sys.time(),24*3600),"%Y_%m_%d"),".rds"),list.files("data/occurences/")),na.rm=TRUE)==0){
     try({
-      wet <- AIScanR::iswet(grid,g,EEZ,latlong,proj)
+      wet <- AIScanR::iswet(grid,g,EEZ,latlong,st_crs(grid))
       # occ <- getdata(grid, g,latlong)
       # isaquatic(occ,wet)
       # saveRDS(occ,paste0("data/occurences/occ_",sprintf("%05d",g),"_",format(Sys.time(), "%Y_%m_%d"),".rds"))
-    
+      # 
     })
-    
+
     return("done")
   } else{
     return("already done")
@@ -198,11 +200,11 @@ x=clusterApply(clust,as.numeric(row.names(grid)), function(g) {
 ) %>% unlist
 parallel::stopCluster(clust)
 
-files <- file.info(paste0(path = "data/wet/",list.files(path = "data/wet/",pattern = "shp"))) %>% 
-  mutate(fn=gsub("data/wet/","",row.names(.))) %>% 
-  filter(size<=100) 
+files <- file.info(paste0(path = "data/wet/",list.files(path = "data/wet/",pattern = "shp"))) %>%
+  mutate(fn=gsub("data/wet/","",row.names(.))) %>%
+  filter(size<=100)
 
 removeme <- lapply(files$fn,
                function(x) list.files(path = "data/wet/",
-                                      pattern=gsub("shp","",x))) %>% 
+                                      pattern=gsub("shp","",x))) %>%
   unlist()
