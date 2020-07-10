@@ -176,7 +176,7 @@ ggplot(grid)+
 
 no_cores <- detectCores()
 # clust <- makeCluster(no_cores/2)
-clust <- makeCluster(4)
+clust <- makeCluster(2)
 clusterExport(clust,"grid")
 clusterExport(clust,"EEZ")
 clusterExport(clust,"latlong")
@@ -187,9 +187,9 @@ x=clusterApply(clust,as.numeric(row.names(grid)), function(g) {
   if(sum(match(paste0("occ_",sprintf("%05d",g),"_",format(seq(Sys.time()-30*24*3600,Sys.time(),24*3600),"%Y_%m_%d"),".rds"),list.files("data/occurences/")),na.rm=TRUE)==0){
     try({
       wet <- AIScanR::iswet(grid,g,EEZ,latlong,st_crs(grid))
-      # occ <- getdata(grid, g,latlong)
-      # isaquatic(occ,wet)
-      # saveRDS(occ,paste0("data/occurences/occ_",sprintf("%05d",g),"_",format(Sys.time(), "%Y_%m_%d"),".rds"))
+      occ <- getdata(grid, g,latlong)
+      isaquatic(occ,wet)
+      saveRDS(occ,paste0("data/occurences/occ_",sprintf("%05d",g),"_",format(Sys.time(), "%Y_%m_%d"),".rds"))
       # 
     })
 
