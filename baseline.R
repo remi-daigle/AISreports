@@ -1,19 +1,16 @@
 # load AIScanR ------------------------------------------------------------
 # devtools::install_github does not work on gpsc, must load functions manually
-source_github <- function(u) {
-  # load package
-  require(RCurl)
-  
+library(RCurl)
+library(htmltools,lib="/fs/vnas_Hdfo/bioios/dar002/R/x86_64-pc-linux-gnu-library/3.5")
+library(httpuv,lib="/fs/vnas_Hdfo/bioios/dar002/R/x86_64-pc-linux-gnu-library/3.5")
+urls <- c("https://raw.githubusercontent.com/remi-daigle/AIScanR/master/R/getdata.R","https://raw.githubusercontent.com/remi-daigle/AIScanR/master/R/iswet.R","https://raw.githubusercontent.com/remi-daigle/AIScanR/master/R/isaquatic.R")
+for(u in urls){
   # read script lines from website
   script <- getURL(u, ssl.verifypeer = FALSE)
   
   # parase lines and evaluate in the global environment
   eval(parse(text = script))
 }
-
-source_github("https://raw.githubusercontent.com/remi-daigle/AIScanR/master/R/getdata.R")
-source_github("https://raw.githubusercontent.com/remi-daigle/AIScanR/master/R/iswet.R")
-source_github("https://raw.githubusercontent.com/remi-daigle/AIScanR/master/R/isaquatic.R")
 
 
 
@@ -190,20 +187,20 @@ grid <- grid %>%
   mutate(done=row.names(.) %in% wetfiles,
          ns=row.names(.) %in% ns)
 
-ggplot(grid)+
-  geom_sf(data=Canada,fill='lightgreen')+
-  geom_sf(data=EEZ,fill='lightblue')+
-  geom_sf(aes(fill=done))
+# ggplot(grid)+
+#   geom_sf(data=Canada,fill='lightgreen')+
+#   geom_sf(data=EEZ,fill='lightblue')+
+#   geom_sf(aes(fill=done))
 
 
 for(g in as.numeric(row.names(grid))){
   if(sum(match(paste0("occ_",sprintf("%05d",g),"_",format(seq(Sys.time()-30*24*3600,Sys.time(),24*3600),"%Y_%m_%d"),".rds"),list.files("data/occurences/")),na.rm=TRUE)==0){
     print(g)
     try({
-      wet <- AIScanR::iswet(grid,g,EEZ,latlong,st_crs(grid))
-      occ <- getdata(grid, g,latlong)
-      isaquatic(occ,wet)
-      saveRDS(occ,paste0("data/occurences/occ_",sprintf("%05d",g),"_",format(Sys.time(), "%Y_%m_%d"),".rds"))
+      wet <- iswet(grid,g,EEZ,latlong,st_crs(grid),cachedir="/fs/isi-nas1/dfo/bioios/dfo_bioios/dar002/AISreports/data/rcanvec",datadir="/fs/isi-nas1/dfo/bioios/dfo_bioios/dar002/AISreports/data/wet/")
+      #occ <- getdata(grid, g,latlong)
+      #isaquatic(occ,wet)
+      #saveRDS(occ,paste0("/fs/isi-nas1/dfo/bioios/dfo_bioios/dar002/AISreports/data/occurences/occ_",sprintf("%05d",g),"_",format(Sys.time(), "%Y_%m_%d"),".rds"))
       #
     })
   }
