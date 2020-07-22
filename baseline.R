@@ -1,10 +1,31 @@
-library(AIScanR)
+# load AIScanR ------------------------------------------------------------
+# devtools::install_github does not work on gpsc, must load functions manually
+source_github <- function(u) {
+  # load package
+  require(RCurl)
+  
+  # read script lines from website
+  script <- getURL(u, ssl.verifypeer = FALSE)
+  
+  # parase lines and evaluate in the global environment
+  eval(parse(text = script))
+}
+
+source_github("https://raw.githubusercontent.com/remi-daigle/AIScanR/master/R/getdata.R")
+source_github("https://raw.githubusercontent.com/remi-daigle/AIScanR/master/R/iswet.R")
+source_github("https://raw.githubusercontent.com/remi-daigle/AIScanR/master/R/isaquatic.R")
+
+
+
+# Load other packages -----------------------------------------------------
+
+# library(AIScanR)
 library(spocc)
 library(robis)
 library(rgbif)
 library(sf)
 library(rnaturalearth)
-library(mregions)
+# library(mregions) # not needed unless re-downloading EEZ
 library(rcanvec)
 library(parallel)
 library(tidyverse)
@@ -174,37 +195,54 @@ ggplot(grid)+
   geom_sf(data=EEZ,fill='lightblue')+
   geom_sf(aes(fill=done))
 
-no_cores <- detectCores()
-# clust <- makeCluster(no_cores/2)
-clust <- makeCluster(2)
-clusterExport(clust,"grid")
-clusterExport(clust,"EEZ")
-clusterExport(clust,"latlong")
-clusterExport(clust,"proj")
-clusterExport(clust,"Canada")
 
-x=clusterApply(clust,as.numeric(row.names(grid)), function(g) {
+for(g in as.numeric(row.names(grid))){
   if(sum(match(paste0("occ_",sprintf("%05d",g),"_",format(seq(Sys.time()-30*24*3600,Sys.time(),24*3600),"%Y_%m_%d"),".rds"),list.files("data/occurences/")),na.rm=TRUE)==0){
+    print(g)
     try({
       wet <- AIScanR::iswet(grid,g,EEZ,latlong,st_crs(grid))
       occ <- getdata(grid, g,latlong)
       isaquatic(occ,wet)
       saveRDS(occ,paste0("data/occurences/occ_",sprintf("%05d",g),"_",format(Sys.time(), "%Y_%m_%d"),".rds"))
-      # 
+      #
     })
+  }
+}
 
-    return("done")
-  } else{
-    return("already done")
-  }}
-) %>% unlist
-parallel::stopCluster(clust)
 
-files <- file.info(paste0(path = "data/wet/",list.files(path = "data/wet/",pattern = "shp"))) %>%
-  mutate(fn=gsub("data/wet/","",row.names(.))) %>%
-  filter(size<=100)
 
-removeme <- lapply(files$fn,
-               function(x) list.files(path = "data/wet/",
-                                      pattern=gsub("shp","",x))) %>%
-  unlist()
+
+# no_cores <- detectCores()
+# # clust <- makeCluster(no_cores/2)
+# clust <- makeCluster(2)
+# clusterExport(clust,"grid")
+# clusterExport(clust,"EEZ")
+# clusterExport(clust,"latlong")
+# clusterExport(clust,"proj")
+# clusterExport(clust,"Canada")
+# 
+# x=clusterApply(clust,as.numeric(row.names(grid)), function(g) {
+#   if(sum(match(paste0("occ_",sprintf("%05d",g),"_",format(seq(Sys.time()-30*24*3600,Sys.time(),24*3600),"%Y_%m_%d"),".rds"),list.files("data/occurences/")),na.rm=TRUE)==0){
+#     try({
+#       wet <- AIScanR::iswet(grid,g,EEZ,latlong,st_crs(grid))
+#       occ <- getdata(grid, g,latlong)
+#       isaquatic(occ,wet)
+#       saveRDS(occ,paste0("data/occurences/occ_",sprintf("%05d",g),"_",format(Sys.time(), "%Y_%m_%d"),".rds"))
+#       #
+#     })
+# 
+#     return("done")
+#   } else{
+#     return("already done")
+#   }}
+# ) %>% unlist
+# parallel::stopCluster(clust)
+
+# files <- file.info(paste0(path = "data/wet/",list.files(path = "data/wet/",pattern = "shp"))) %>%
+#   mutate(fn=gsub("data/wet/","",row.names(.))) %>%
+#   filter(size<=100)
+# 
+# removeme <- lapply(files$fn,
+#                function(x) list.files(path = "data/wet/",
+#                                       pattern=gsub("shp","",x))) %>%
+#   unlist()
